@@ -2,13 +2,6 @@
 
 This is a simple go module, to replace environment variables placeholders in files in place.
 
-## Running the app
-
-```shell
-go build .
-./inplaceenvsubst <file_path_a> <file_path_b>
-```
-
 ### Example
 
 File (at path `/documents/test.txt`)
