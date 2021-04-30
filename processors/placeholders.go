@@ -28,7 +28,9 @@ func (p *ReplaceEnvVariablesProcessor) EnvPlaceholderFound(e *EnvPlaceholderFoun
 		return &EnvPlaceholderResult{e.Line, e.End}
 	}
 	enValueRunes := []rune(value)
-	newLine := append(e.Line[:e.Start], enValueRunes...)
+	var newLine []rune
+	newLine = append(newLine, e.Line[:e.Start]...)
+	newLine = append(newLine, enValueRunes...)
 	newLine = append(newLine, e.Line[e.End:]...)
 	newIdx := e.Start + len(enValueRunes)
 	return &EnvPlaceholderResult{newLine, newIdx}

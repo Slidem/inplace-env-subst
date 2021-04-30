@@ -31,6 +31,31 @@ func TestSubstPanicWhenPlaceholderNotClosed(t *testing.T) {
 	})
 }
 
+func TestSubstWithValueBiggerThanKey(t *testing.T) {
+	t.Run("Test without validation", func(t *testing.T) {
+		// given
+		os.Setenv("VAR", "bigger_value")
+		expectedContent := ` env bigger_value value length bigger than placeholder length`
+		testFileTemplate := ` env ${VAR} value length bigger than placeholder length`
+		testFile := createTempFileFromTemplate(testFileTemplate)
+		defer func() {
+			os.Remove(testFile.Name())
+			os.Unsetenv("VAR")
+		}()
+		// when
+		inplaceenvsubst.ProcessFiles([]string{testFile.Name()}, &inplaceenvsubst.Config{
+			FailOnMissingVariables: false,
+			RunInParallel:          false,
+			ErrorListener:          nil,
+		})
+		// expect
+		replacedContent := readContentFromFile(testFile.Name())
+		if expectedContent != replacedContent {
+			t.Fatalf("Replaced content does not match expected one")
+		}
+	})
+}
+
 func TestSubstWithoutValidation(t *testing.T) {
 
 	config := &inplaceenvsubst.Config{
