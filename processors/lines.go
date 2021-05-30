@@ -1,16 +1,22 @@
 package processors
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type LinesProcessor struct {
 	ProcessedLines       []string
 	PlaceholderProcessor EnvPlaceholderProcessor
+	Config               Config
 }
 
 // TODO: improve this algorithm
 // it can be cleaned-up and modified to support different type of placeholder delimiters
 // right now it just supports ${} placeholder delimiter
-func (p *LinesProcessor) ProcessLine(number int, line string) {
+// another options, is to have different tipes of Lines Processors, based on the configuration
+// this would allow an easier way to maintain both $, ${}, and __variable__ types
+func (p *LinesProcessor) ProcessLine(number int, line string) error {
 
 	lineRunes := []rune(line)
 	idx := 0
@@ -43,7 +49,7 @@ func (p *LinesProcessor) ProcessLine(number int, line string) {
 				idx++
 				if idx == len(lineRunes) {
 					// special case, where a placeholder was opened, but not closed at the end of file (eg: ${something \n)
-					panic(fmt.Sprintf("Expected } but found newline on line number %d", number+1))
+					return errors.New(fmt.Sprintf("Expected } but found newline on line number %d", number))
 				}
 
 				// if closing character found
@@ -58,7 +64,7 @@ func (p *LinesProcessor) ProcessLine(number int, line string) {
 					}
 					end := idx
 					// trigger placeholder found event
-					if len(placeHolderRunes) != 0 {
+					if len(placeHolderRunes) != 0 && !p.Config.ShouldIgnoreEnv(string(placeHolderRunes)){
 						response := p.PlaceholderProcessor.EnvPlaceholderFound(&EnvPlaceholderFoundEvent{
 							Start:       start,
 							End:         end,
@@ -78,6 +84,8 @@ func (p *LinesProcessor) ProcessLine(number int, line string) {
 		}
 	}
 	p.ProcessedLines = append(p.ProcessedLines, string(lineRunes))
+
+	return nil
 }
 
 func (p *LinesProcessor) ProcessFinishedForPath(filePath string) error {

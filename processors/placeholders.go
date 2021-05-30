@@ -22,17 +22,28 @@ type EnvPlaceholderProcessor interface {
 type ReplaceEnvVariablesProcessor struct{}
 
 func (p *ReplaceEnvVariablesProcessor) EnvPlaceholderFound(e *EnvPlaceholderFoundEvent) *EnvPlaceholderResult {
-	env := string(e.Placeholder)
-	value, exists := os.LookupEnv(env)
+
+	key := getKey(e)
+	value, exists := os.LookupEnv(key)
 	if !exists {
-		return &EnvPlaceholderResult{e.Line, e.End}
+		defaultValue, hasDefault := getDefault(e)
+		if hasDefault {
+			value = defaultValue
+		} else {
+			return &EnvPlaceholderResult{e.Line, e.End}
+		}
 	}
+
+	// transform value to runes
 	enValueRunes := []rune(value)
 	var newLine []rune
 	newLine = append(newLine, e.Line[:e.Start]...)
 	newLine = append(newLine, enValueRunes...)
 	newLine = append(newLine, e.Line[e.End:]...)
+
+	// update index to initial start + len of the value
 	newIdx := e.Start + len(enValueRunes)
+
 	return &EnvPlaceholderResult{newLine, newIdx}
 }
 
@@ -52,10 +63,13 @@ type EnvVariableExistsDecorator struct {
 }
 
 func (p *EnvVariableExistsDecorator) EnvPlaceholderFound(e *EnvPlaceholderFoundEvent) *EnvPlaceholderResult {
-	env := string(e.Placeholder)
-	value, exists := os.LookupEnv(env)
+	key := getKey(e)
+	_, exists := os.LookupEnv(key)
 	if !exists {
-		p.MissingEnvVariables = append(p.MissingEnvVariables, value)
+		_, hasDefault := getDefault(e)
+		if !hasDefault {
+			p.MissingEnvVariables = append(p.MissingEnvVariables, key)
+		}
 	}
 	return p.Processor.EnvPlaceholderFound(e)
 }
@@ -66,4 +80,17 @@ func (p *EnvVariableExistsDecorator) FileProcessingFinished(e *FileProcessingFin
 	} else {
 		return errors.New(fmt.Sprintf("Missing environment variables: %v", p.MissingEnvVariables))
 	}
+}
+
+func getKey(e *EnvPlaceholderFoundEvent) string {
+	placeHolderParts := strings.Split(string(e.Placeholder), ":-")
+	return placeHolderParts[0]
+}
+
+func getDefault(e *EnvPlaceholderFoundEvent) (string, bool) {
+	placeHolderParts := strings.Split(string(e.Placeholder), ":-")
+	if len(placeHolderParts) != 2 {
+		return "", false
+	}
+	return placeHolderParts[1], true
 }

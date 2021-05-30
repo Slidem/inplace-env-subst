@@ -1,14 +1,15 @@
 package inplaceenvsubst
 
 import (
+	"bufio"
+	"errors"
 	"github.com/Slidem/inplaceenvsubst/processors"
-	"io/ioutil"
 	"log"
-	"strings"
+	"os"
 	"sync"
 )
 
-var replaceEnvsProcessor = &processors.ReplaceEnvVariablesProcessor{}
+var envPlaceholderProcessor = &processors.ReplaceEnvVariablesProcessor{}
 
 type ErrorListener interface {
 	ErrorFound(filepath string, err error)
@@ -29,7 +30,6 @@ func ProcessFiles(filePaths []string, config *Config) {
 }
 
 func processSequentially(filePaths []string, config *Config) {
-
 	for _, p := range filePaths {
 		processFile(p, config)
 	}
@@ -52,30 +52,54 @@ func processFileAsync(w *sync.WaitGroup, filePath string, config *Config) {
 
 func processFile(filePath string, config *Config) {
 
+	if !config.WhitelistEnvs.IsEmpty() && !config.BlacklistEnvs.IsEmpty() {
+		config.ErrorListener.ErrorFound(filePath, errors.New("cannot have both whitelist and blacklist environment keys"))
+		return
+	}
+
 	var processor processors.EnvPlaceholderProcessor
-	processor = replaceEnvsProcessor
+	processor = envPlaceholderProcessor
 	if config.FailOnMissingVariables {
 		processor = &processors.EnvVariableExistsDecorator{
 			Processor: processor,
 		}
 	}
-	err := process(filePath, &processors.LinesProcessor{
+
+	err := processLineByLine(filePath, &processors.LinesProcessor{
 		ProcessedLines:       []string{},
-		PlaceholderProcessor: replaceEnvsProcessor,
+		PlaceholderProcessor: processor,
+		Config:               config,
 	})
+
 	if err != nil && config.ErrorListener != nil {
 		config.ErrorListener.ErrorFound(filePath, err)
 	}
 }
 
-func process(filePath string, s *processors.LinesProcessor) error {
-	data, err := ioutil.ReadFile(filePath)
+func processLineByLine(filePath string, s *processors.LinesProcessor) error {
+
+	file, err := os.Open(filePath)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	fileLines := strings.Split(string(data), "\n")
-	for number, line := range fileLines {
-		s.ProcessLine(number, line)
+	defer file.Close()
+
+	scn := bufio.NewScanner(file)
+
+	var line string
+	var lineNumber = 1
+	for scn.Scan() {
+		line = scn.Text()
+		err = s.ProcessLine(lineNumber, line)
+		if err != nil {
+			return err
+		}
+		lineNumber += 1
 	}
+
+	if err = scn.Err(); err != nil {
+		return err
+	}
+
 	return s.ProcessFinishedForPath(filePath)
 }

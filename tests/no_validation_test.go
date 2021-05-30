@@ -2,57 +2,36 @@ package tests
 
 import (
 	"github.com/Slidem/inplaceenvsubst"
-	"io/ioutil"
-	"log"
 	"os"
 	"testing"
 )
 
-func TestSubstPanicWhenPlaceholderNotClosed(t *testing.T) {
+func TestInvalidPlaceholderFormatIgnored(t *testing.T) {
 
-	testFileTemplate := `
-		opened but not closed ${NOT_CLOSING and other text
-	`
-	testFile := createTempFileFromTemplate(testFileTemplate)
-	defer os.Remove(testFile.Name())
 
-	// expect to panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("Expected panic")
-		}
-	}()
-
-	// when
-	inplaceenvsubst.ProcessFiles([]string{testFile.Name()}, &inplaceenvsubst.Config{
-		FailOnMissingVariables: false,
-		RunInParallel:          false,
-		ErrorListener:          nil,
-	})
-}
-
-func TestSubstWithValueBiggerThanKey(t *testing.T) {
-	t.Run("Test without validation", func(t *testing.T) {
+	t.Run("Test replacement of env variable with invalid placeholder format ignored", func(t *testing.T) {
 		// given
-		os.Setenv("VAR", "bigger_value")
-		expectedContent := ` env bigger_value value length bigger than placeholder length`
-		testFileTemplate := ` env ${VAR} value length bigger than placeholder length`
+		testFileTemplate := ` env ${VAR}}}} has multiple closing brackets, and should be ignored`
 		testFile := createTempFileFromTemplate(testFileTemplate)
+		_ = os.Setenv("VAR", "testValue")
+
 		defer func() {
-			os.Remove(testFile.Name())
-			os.Unsetenv("VAR")
+			_ = os.Remove(testFile.Name())
+			_ = os.Unsetenv("VAR")
 		}()
-		// when
+
+		mc := MessageCaptureErrorListener{}
 		inplaceenvsubst.ProcessFiles([]string{testFile.Name()}, &inplaceenvsubst.Config{
-			FailOnMissingVariables: false,
+			FailOnMissingVariables: true,
 			RunInParallel:          false,
-			ErrorListener:          nil,
+			ErrorListener:          &mc,
 		})
+
+		// when
+		_ = readContentFromFile(testFile.Name())
+
 		// expect
-		replacedContent := readContentFromFile(testFile.Name())
-		if expectedContent != replacedContent {
-			t.Fatalf("Replaced content does not match expected one")
-		}
+		verifyExpectedContent(t, testFile, testFileTemplate)
 	})
 }
 
@@ -73,7 +52,7 @@ func TestSubstWithoutValidation(t *testing.T) {
 	}
 
 	teardown := func() {
-		os.Remove(tempFile.Name())
+		_ = os.Remove(tempFile.Name())
 		_ = os.Unsetenv("testA")
 		_ = os.Unsetenv("testB")
 	}
@@ -142,30 +121,7 @@ func TestSubstWithoutValidation(t *testing.T) {
 			inplaceenvsubst.ProcessFiles([]string{tempFile.Name()}, config)
 
 			// expect
-			replacedContent := readContentFromFile(tempFile.Name())
-			if expectedContent != replacedContent {
-				t.Fatalf("Replaced content does not match expected one")
-			}
+			verifyExpectedContent(t, tempFile, expectedContent)
 		})
 	}
-}
-
-func readContentFromFile(name string) string {
-	content, err := ioutil.ReadFile(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(content)
-}
-
-func createTempFileFromTemplate(testFileTemplate string) *os.File {
-	tempFile, err := ioutil.TempFile(os.TempDir(), "test-template-")
-	if err != nil {
-		log.Fatal("Cannot create temporary file", err)
-	}
-	if _, err = tempFile.Write([]byte(testFileTemplate)); err != nil {
-		log.Fatal("Failed to write to test file", err)
-	}
-	defer tempFile.Close()
-	return tempFile
 }
