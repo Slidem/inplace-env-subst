@@ -3,7 +3,7 @@ package inplaceenvsubst
 import (
 	"bufio"
 	"errors"
-	"github.com/Slidem/inplaceenvsubst/processors"
+	"github.com/Slidem/inplaceenvsubst/v2/processors"
 	"log"
 	"os"
 	"sync"
